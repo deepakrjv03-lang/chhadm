@@ -775,6 +775,14 @@
     const auth = firebase.auth();
 
     let notificationsEnabled = localStorage.getItem('notificationsEnabled') !== 'false';
+    let smsAlertsEnabled = localStorage.getItem('smsAlertsEnabled') !== 'false';
+
+    function toggleSmsAlerts() {
+        smsAlertsEnabled = !smsAlertsEnabled;
+        localStorage.setItem('smsAlertsEnabled', smsAlertsEnabled);
+        updateNotifUI();
+        showToast(smsAlertsEnabled ? "SMS popups enabled" : "SMS popups disabled", "info");
+    }
 
     function updateNotifUI() {
         const btn = document.getElementById('notif-toggle-btn');
