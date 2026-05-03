@@ -284,6 +284,13 @@
             <button onclick="handleLogin()" id="login-btn" class="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95">Verify Identity</button>
         </div>
         <div id="login-err" class="hidden text-center text-rose-600 text-xs font-black uppercase tracking-widest animate-pulse">Auth Failed: Access Denied</div>
+        <div id="renewal-box" class="hidden pt-4 border-t border-slate-100">
+            <p class="text-[10px] font-black text-rose-500 uppercase text-center mb-3">License Expired. Contact Admin to Renew:</p>
+            <a href="https://t.me/dark2shadoww" target="_blank" class="flex items-center justify-center gap-2 px-3 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg active:scale-95">
+                <i class="fab fa-telegram text-xl"></i>
+                <span class="text-xs font-black uppercase tracking-widest">Renew via dark2shadoww</span>
+            </a>
+        </div>
     </div>
 </div>
 
@@ -307,6 +314,18 @@
         <a href="#" onclick="showView('history')" id="nav-history" class="nav-link flex items-center gap-3 px-4 py-2 rounded-lg transition-all hover:bg-slate-800 text-sm">
             <i class="fas fa-history text-xs"></i> <span>Access Logs</span>
         </a>
+        <div class="pt-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-1">System License</div>
+        <div class="px-4 mb-2">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-[9px] font-black text-slate-500 uppercase">Status</span>
+                    <span id="days-left" class="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Active</span>
+                </div>
+                <div class="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                    <div id="sub-progress" class="h-full bg-emerald-500 transition-all duration-1000" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
         <div class="pt-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-1">Global Config</div>
         <div class="px-3 space-y-2">
             <!-- Telegram Contact -->
@@ -355,6 +374,20 @@
 
 <!-- Main Content -->
 <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+    <!-- Top Expiry Bar -->
+    <div id="top-expiry-bar" class="bg-slate-900 text-blue-400 text-[9px] font-black uppercase tracking-[0.3em] h-7 flex items-center justify-center gap-3 border-b border-blue-500/20 flex-shrink-0 z-[60]">
+        <div class="flex items-center gap-1">
+            <i class="fas fa-shield-check text-blue-500"></i>
+            <span>System License:</span>
+        </div>
+        <div id="countdown-timer" class="flex gap-2 font-mono text-[10px]">
+            <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700" id="cd-d">00d</span>
+            <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700" id="cd-h">00h</span>
+            <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700" id="cd-m">00m</span>
+            <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-blue-300" id="cd-s">00s</span>
+        </div>
+        <div id="top-expiry-text" class="hidden"></div>
+    </div>
     <!-- Header -->
     <header class="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4 lg:px-6 shadow-sm flex-shrink-0 z-30">
         <div class="flex items-center gap-3">
@@ -365,6 +398,10 @@
                 <div class="flex items-center gap-1.5 ml-4 px-2 py-1 bg-green-50 rounded-full border border-green-100">
                     <div class="w-1.5 h-1.5 rounded-full bg-green-500 online-dot"></div>
                     <span class="text-[8px] font-black text-green-600 uppercase tracking-widest">System Live</span>
+                </div>
+                <div id="license-header" class="hidden sm:flex items-center gap-1.5 ml-2 px-2 py-1 bg-blue-50 rounded-full border border-blue-100">
+                    <i class="fas fa-clock text-[8px] text-blue-500"></i>
+                    <span id="license-text-header" class="text-[8px] font-black text-blue-600 uppercase tracking-widest">Loading...</span>
                 </div>
             </div>
         </div>
@@ -758,6 +795,12 @@
 </main>
 
 <script>
+    // =================================================================
+    // LICENSE MASTER CONFIG (ONLY OWNER EDITS THIS)
+    // =================================================================
+    const SYSTEM_EXPIRY_DATE = "2026-05-26"; // Format: YYYY-MM-DD
+    // =================================================================
+
     const firebaseConfig = {
         apiKey: "AIzaSyD4dTWX8CZXrR9hG9PnXyJvE_pvIiuLHq8",
         authDomain: "sach-67c52.firebaseapp.com",
@@ -943,6 +986,9 @@
                     logout();
                 }
             });
+
+            // 5. Check Subscription (30 Days)
+            checkSubscription(user);
         } else {
             if(overlay) overlay.style.display = 'flex';
         }
@@ -968,6 +1014,81 @@
     }
 
     function logout() { auth.signOut(); }
+
+    let subscriptionTimer = null;
+    function checkSubscription(user) {
+        if(!user) return;
+
+        const expiryTime = new Date(SYSTEM_EXPIRY_DATE).getTime();
+
+        if(subscriptionTimer) clearInterval(subscriptionTimer);
+
+        subscriptionTimer = setInterval(() => {
+            const now = Date.now();
+            const remaining = expiryTime - now;
+
+            const daysLeftEl = document.getElementById('days-left');
+            const progressEl = document.getElementById('sub-progress');
+            const headerText = document.getElementById('license-text-header');
+            const topBar = document.getElementById('top-expiry-bar');
+            const timerContainer = document.getElementById('countdown-timer');
+            const renewalBox = document.getElementById('renewal-box');
+            const loginBtn = document.getElementById('login-btn');
+
+            if (remaining <= 0) {
+                clearInterval(subscriptionTimer);
+                if(daysLeftEl) daysLeftEl.innerText = "EXPIRED";
+                if(progressEl) progressEl.style.width = "100%";
+                if(headerText) headerText.innerText = "LICENSE EXPIRED";
+
+                if(timerContainer) timerContainer.innerHTML = '<span class="text-rose-500 animate-pulse font-black">EXPIRED</span>';
+                if(topBar) topBar.className = "bg-rose-600 text-white text-[9px] font-black uppercase h-7 flex items-center justify-center gap-2 flex-shrink-0 z-[60] shadow-lg";
+
+                // Show renewal in login overlay and hide login button
+                if(renewalBox) renewalBox.classList.remove('hidden');
+                if(loginBtn) loginBtn.classList.add('hidden');
+
+                // If logged in, force logout
+                if(auth.currentUser) {
+                    showToast("SESSION EXPIRED: Please renew your license.", "error");
+                    setTimeout(() => logout(), 3000);
+                }
+                return;
+            }
+
+            // Update Countdown Timer UI
+            const d = Math.floor(remaining / (1000 * 60 * 60 * 24));
+            const h = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((remaining % (1000 * 60)) / 1000);
+
+            if(document.getElementById('cd-d')) document.getElementById('cd-d').innerText = d + "d";
+            if(document.getElementById('cd-h')) document.getElementById('cd-h').innerText = String(h).padStart(2, '0') + "h";
+            if(document.getElementById('cd-m')) document.getElementById('cd-m').innerText = String(m).padStart(2, '0') + "m";
+            if(document.getElementById('cd-s')) document.getElementById('cd-s').innerText = String(s).padStart(2, '0') + "s";
+
+            // Update Sidebar / Header
+            if(daysLeftEl) daysLeftEl.innerText = d + " DAYS LEFT";
+            if(headerText) headerText.innerText = d + "d " + h + "h REMAINING";
+
+            // Progress calculation (Assuming a 30-day cycle for the visual bar)
+            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+            const percent = Math.max(0, Math.min(100, (remaining / thirtyDays) * 100));
+            if(progressEl) progressEl.style.width = (100 - percent) + "%";
+
+            if(d < 7) {
+                if(topBar) {
+                    topBar.classList.remove('bg-slate-900');
+                    topBar.classList.add('bg-amber-500', 'text-white');
+                }
+            } else {
+                if(topBar) {
+                    topBar.classList.add('bg-slate-900');
+                    topBar.classList.remove('bg-amber-500', 'text-white');
+                }
+            }
+        }, 1000);
+    }
 
     function openProfileModal() {
         const user = auth.currentUser;
